@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shuttle Strike - Juego Web</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Arial', sans-serif;
+        }
+        #gameContainer, #startScreen, #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: #fff;
+        }
+        #gameCanvas {
+            border: 2px solid #0f0;
+            background-color: #000;
+        }
+        .hidden {
+            display: none;
+        }
+        .button {
+            @apply bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded;
+        }
+        .score {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 24px;
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <div id="startScreen">
+        <h1 class="text-4xl mb-4">Shuttle Strike</h1>
+        <button id="startButton" class="button">Jugar</button>
+    </div>
+    <div id="gameContainer" class="hidden">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="score" class="score">Puntuación: 0</div>
+    </div>
+    <div id="gameOverScreen" class="hidden">
+        <h1 class="text-4xl mb-4">Game Over</h1>
+        <p id="finalScore" class="mb-4"></p>
+        <button id="restartButton" class="button">Reiniciar</button>
+    </div>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/howler/2.2.3/howler.min.js"></script>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const startScreen = document.getElementById('startScreen');
+        const gameContainer = document.getElementById('gameContainer');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreElement = document.getElementById('finalScore');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+
+        let paddleHeight = 80;
+        let paddleWidth = 10;
+        let ballSize = 10;
+        let player = { x: 50, y: canvas.height/2 - paddleHeight/2, width: paddleWidth, height: paddleHeight, dy: 5 };
+        let ai = { x: canvas.width - 50 - paddleWidth, y: canvas.height/2 - paddleHeight/2, width: paddleWidth, height: paddleHeight, dy: 5 };
+        let shuttlecock = { x: canvas.width/2, y: canvas.height/2, dx: 5, dy: 5, radius: ballSize };
+        let score = 0;
+        let speedIncrease = 1.05;
+        let gameRunning = false;
+        let difficulty = 1;
+
+        // Sound effects (placeholders, replace with real URLs or local files)
+        const hitSound = new Howl({
+            src: ['https://www.myinstance.com/hit.wav']
+        });
+        const scoreSound = new Howl({
+            src: ['https://www.myinstance.com/score.wav']
+        });
+
+        function drawRect(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, width, height);
+        }
+
+        function drawCircle(x, y, radius, color) {
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI*2, false);
+            ctx.fill();
+        }
+
+        function movePaddle(paddle, dy) {
+            paddle.y += dy;
+            paddle.y = Math.max(0, Math.min(canvas.height - paddle.height, paddle.y));
+        }
+
+        function moveAI() {
+            const aiCenter = ai.y + ai.height / 2;
+            const shuttlecockCenter = shuttlecock.y;
+
+            if (aiCenter < shuttlecockCenter - 10) {
+                ai.y += ai.dy * difficulty;
+            } else if (aiCenter > shuttlecockCenter + 10) {
+                ai.y -= ai.dy * difficulty;
+            }
+            ai.y = Math.max(0, Math.min(canvas.height - ai.height, ai.y));
+        }
+
+        function moveShuttlecock() {
+            shuttlecock.x += shuttlecock.dx;
+            shuttlecock.y += shuttlecock.dy;
+
+            // Colisiones con las paredes superior e inferior
+            if (shuttlecock.y + shuttlecock.radius > canvas.height || shuttlecock.y - shuttlecock.radius < 0) {
+                shuttlecock.dy = -shuttlecock.dy;
+                hitSound.play();
+            }
+
+            // Colisión con la paleta del jugador (izquierda)
+            if (
+                shuttlecock.x - shuttlecock.radius < player.x + player.width &&
+                shuttlecock.y > player.y && shuttlecock.y < player.y + player.height
+            ) {
+                shuttlecock.dx = -shuttlecock.dx * speedIncrease;
+                hitSound.play();
+                score += 1;
+                scoreElement.textContent = `Puntuación: ${score}`;
+                difficulty = 1 + score * 0.05; // Aumentar dificultad progresivamente
+            }
+
+            // Colisión con la paleta de la IA (derecha)
+            if (
+                shuttlecock.x + shuttlecock.radius > ai.x &&
+                shuttlecock.y > ai.y && shuttlecock.y < ai.y + ai.height
+            ) {
+                shuttlecock.dx = -shuttlecock.dx * speedIncrease;
+                hitSound.play();
+            }
+
+            // Game Over si el shuttlecock sale por la izquierda o derecha
+            if (shuttlecock.x < 0) {
+                gameRunning = false;
+                gameOverScreen.classList.remove('hidden');
+                gameContainer.classList.add('hidden');
+                finalScoreElement.textContent = `Puntuación final: ${score}`;
+                scoreSound.play();
+            } else if (shuttlecock.x > canvas.width) {
+                gameRunning = false;
+                gameOverScreen.classList.remove('hidden');
+                gameContainer.classList.add('hidden');
+                finalScoreElement.textContent = `Puntuación final: ${score}`;
+                scoreSound.play();
+            }
+        }
+
+        function draw() {
+            // Fondo negro
+            drawRect(0, 0, canvas.width, canvas.height, '#000');
+            // Línea central
+            ctx.beginPath();
+            ctx.setLineDash([5, 15]);
+            ctx.moveTo(canvas.width/2, 0);
+            ctx.lineTo(canvas.width/2, canvas.height);
+            ctx.strokeStyle = '#0f0';
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+
+            // Paleta del jugador (izquierda)
+            drawRect(player.x, player.y, player.width, player.height, '#0f0');
+            // Paleta de la IA (derecha)
+            drawRect(ai.x, ai.y, ai.width, ai.height, '#0f0');
+            // Shuttlecock (bola)
+            drawCircle(shuttlecock.x, shuttlecock.y, shuttlecock.radius, '#fff');
+
+            // Borde verde
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function gameLoop() {
+            if (gameRunning) {
+                moveAI();
+                moveShuttlecock();
+                draw();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+
+        // Controles del jugador (teclado)
+        document.addEventListener('keydown', (e) => {
+            if (!gameRunning) return;
+            switch(e.key) {
+                case 'w':
+                    movePaddle(player, -player.dy);
+                    break;
+                case 's':
+                    movePaddle(player, player.dy);
+                    break;
+            }
+        });
+
+        // Controles del jugador (mouse/touch para móviles y PC)
+        canvas.addEventListener('mousemove', (e) => {
+            if (!gameRunning) return;
+            const rect = canvas.getBoundingClientRect();
+            const y = e.clientY - rect.top - player.height/2;
+            player.y = Math.max(0, Math.min(canvas.height - player.height, y));
+        });
+
+        // Iniciar el juego
+        startButton.addEventListener('click', () => {
+            startScreen.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            resetGame();
+            gameRunning = true;
+            gameLoop();
+        });
+
+        // Reiniciar el juego
+        restartButton.addEventListener('click', () => {
+            gameOverScreen.classList.add('hidden');
+            gameContainer.classList.remove('hidden');
+            resetGame();
+            gameRunning = true;
+            gameLoop();
+        });
+
+        function resetGame() {
+            player.y = canvas.height/2 - paddleHeight/2;
+            ai.y = canvas.height/2 - paddleHeight/2;
+            shuttlecock.x = canvas.width/2;
+            shuttlecock.y = canvas.height/2;
+            shuttlecock.dx = 5; // Asegurar velocidad inicial positiva
+            shuttlecock.dy = 5 * (Math.random() * 2 - 1); // Movimiento inicial aleatorio vertical
+            score = 0;
+            scoreElement.textContent = `Puntuación: ${score}`;
+            difficulty = 1;
+            gameRunning = true; // Asegurar que el juego esté activo
+        }
+
+        // Ajustar tamaño del canvas para responsividad
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * 0.9;
+            canvas.height = window.innerHeight * 0.8;
+            player.x = 50;
+            ai.x = canvas.width - 50 - paddleWidth;
+            resetGame(); // Reiniciar posiciones al redimensionar
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+    </script>
+</body>
+</html>
